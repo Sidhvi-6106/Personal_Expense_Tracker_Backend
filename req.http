@@ -1,0 +1,38 @@
+### user registration
+POST http://localhost:4000/auth-api/auth
+Content-Type: application/json
+
+{
+    "username":"Spurthi",
+    "email":"spurthi66@gmail.com",
+    "number":9900011249,
+    "password":"Spurthi@66",
+    "monthlyIncome":100000
+}
+
+### user login
+POST http://localhost:4000/auth-api/auth/login
+Content-Type: application/json
+
+{
+    "email":"spurthi66@gmail.com",
+    "password":"Spurthi@66"
+}
+
+### posting the transactions data
+POST http://localhost:4000/transactions-api/transactions/69b7c46aacbd45d5e9622903
+Content-Type: application/json
+
+{
+  "amount": 2000,
+  "category": "clothes",
+  "date": "2024-06-15",
+  "description": "shopping"
+}
+
+###getting transaction details
+GET http://localhost:4000/transactions-api/transactions/69b7bfbe39b124d6da417f4c
+
+### getting analysis of the tranactions
+GET http://localhost:4000/analytics-api/overall-analysis/69b7bfbe39b124d6da417f4c
+
