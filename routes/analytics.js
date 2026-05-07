@@ -1,39 +1,47 @@
-// import exp from "express"
-// import Transaction from "../models/Transaction.js"
-// import EMI from "../models/EMI.js"
-
-// export const analyticsRouter=exp.Router();
-// analyticsRouter.get('/totals', async(req,res)=>{
-//     try{
-//         const data=await Transaction.aggregate([
-//             {$group:{_id:"$category",totalAmount:{$sum:"$amount"}}}
-//         ]);
-//         res.status(200).json(data);
-//     }catch(err){
-//         res.status(500).json({message:"Error Fetching Analytics"})
-//     }
-// });
 import exp from 'express';
+import mongoose from 'mongoose';
 import Transaction from '../models/Transaction.js';
-import EMI from '../models/EMI.js'; // Ensure .js extension
+import EMI from '../models/EMI.js';
+import { checkUser } from '../middleware/checkUser.js';
+
 export const analyticsRouter = exp.Router();
-analyticsRouter.get('/overall-analysis/:id', async (req, res) => {
+
+analyticsRouter.get('/overall-analysis', checkUser, async (req, res) => {
     try {
-        // 1. Get Transaction totals by category
+        const userId = new mongoose.Types.ObjectId(req.user._id);
+
         const transactionData = await Transaction.aggregate([
-            { $group: { _id: "$category", total: { $sum: "$amount" } } }
+            { $match: { userId: userId, isActive: true } },
+            {
+                $group: {
+                    _id: { category: "$category", type: "$type" },
+                    total: { $sum: "$amount" },
+                    count: { $sum: 1 }
+                }
+            }
         ]);
 
-        // 2. Get EMI totals (usually EMIs are fixed, so we sum the 'amount')
         const emiData = await EMI.aggregate([
-            { $group: { _id: "Fixed EMIs", total: { $sum: "$amount" } } }
+            { $match: { userId: userId } },
+            {
+                $group: {
+                    _id: "Fixed EMIs",
+                    total: { $sum: "$loanAmount" }
+                }
+            }
         ]);
 
-        // 3. Combine them into one array for the chart
         const finalData = [...transactionData, ...emiData];
 
-        res.status(200).json(finalData);
+        res.status(200).json({
+            message: "User Financial Analysis",
+            payload: finalData
+        });
+
     } catch (err) {
-        res.status(500).json({ message: "Error", error: err.message });
+        res.status(500).json({
+            message: "Error generating analysis",
+            error: err.message
+        });
     }
 });

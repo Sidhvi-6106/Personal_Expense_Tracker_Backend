@@ -2,17 +2,22 @@ import exp from "express";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { checkUser } from "../middleware/checkUser.js";
+import bcrypt from "bcryptjs";
 
 export const authRouter = exp.Router();
 
-//register
-// https://wss32shz-4000.inc1.devtunnels.ms/
+const buildUserResponse = (user) => ({
+  id: user._id,
+  username: user.username,
+  email: user.email,
+  number: user.number,
+  monthlyIncome: user.monthlyIncome
+});
+
 authRouter.post("/auth", async (req, res) => {
   try {
-
     const { username, email } = req.body;
 
-    // check if username exists
     const existingUsername = await User.findOne({ username });
     if (existingUsername) {
       return res.status(400).json({
@@ -20,7 +25,6 @@ authRouter.post("/auth", async (req, res) => {
       });
     }
 
-    // check if email exists
     const existingEmail = await User.findOne({ email });
     if (existingEmail) {
       return res.status(400).json({
@@ -30,34 +34,23 @@ authRouter.post("/auth", async (req, res) => {
 
     const newUser = new User(req.body);
     const savedUser = await newUser.save();
-    const userResponse = savedUser.toObject();
-    delete userResponse.password;
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "User Created Successfully",
-      payload: userResponse
+      payload: buildUserResponse(savedUser),
+      user: buildUserResponse(savedUser)
     });
-
   } catch (err) {
-
-    console.error("Registration Error:", err);
-
-    res.status(500).json({
+    return res.status(500).json({
       message: "Registration failed",
       error: err.message
     });
-
   }
 });
 
-//login
 authRouter.post("/auth/login", async (req, res) => {
-
   try {
-
     const { email, password } = req.body;
-
-    // check if user exists
     const user = await User.findOne({ email });
 
     if (!user) {
@@ -66,7 +59,6 @@ authRouter.post("/auth/login", async (req, res) => {
       });
     }
 
-    // compare password
     const isMatch = await user.comparePassword(password);
 
     if (!isMatch) {
@@ -75,60 +67,112 @@ authRouter.post("/auth/login", async (req, res) => {
       });
     }
 
-    // generate token
     const token = jwt.sign(
       { userId: user._id },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
 
-    res.json({
-      message: "Login Successful",
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        monthlyIncome: user.monthlyIncome
-      }
+    res.cookie("token", token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60 * 1000
     });
 
+    return res.json({
+      message: "Login Successful",
+      token,
+      user: buildUserResponse(user)
+    });
   } catch (err) {
-
-    console.error("Login Error:", err);
-
-    res.status(500).json({
+    return res.status(500).json({
       message: "Login failed",
       error: err.message
     });
-
   }
-
 });
-
 
 authRouter.get("/auth/profile", checkUser, async (req, res) => {
   try {
-    // req.user comes from your checkUser middleware
-    // We can fetch the user again but 'populate' the transactions array
-    const userWithTransactions = await User.findById(req.user.userId).populate('transactions');
+    return res.json({
+      message: "User profile fetched",
+      user: buildUserResponse(req.user)
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Error fetching profile"
+    });
+  }
+});
 
-    if (!userWithTransactions) {
-      return res.status(404).json({ message: "User not found" });
+authRouter.put("/auth/profile", checkUser, async (req, res) => {
+  try {
+    const { username, monthlyIncome, number } = req.body;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        $set: {
+          ...(username && { username }),
+          ...(typeof monthlyIncome !== "undefined" && { monthlyIncome }),
+          ...(number && { number })
+        }
+      },
+      {
+        new: true,
+        runValidators: true
+      }
+    );
+
+    return res.status(200).json({
+      message: "Profile updated successfully",
+      user: buildUserResponse(updatedUser)
+    });
+  } catch (err) {
+    return res.status(400).json({
+      message: err.message
+    });
+  }
+});
+
+authRouter.put("/auth/change-password", checkUser, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(401).json({
+        message: "Invalid User"
+      });
     }
 
-    res.json({
-      message: "User profile and transactions fetched",
-      user: {
-        id: userWithTransactions._id,
-        username: userWithTransactions.username,
-        email: userWithTransactions.email,
-        monthlyIncome: userWithTransactions.monthlyIncome,
-        transactions: userWithTransactions.transactions // Now contains full transaction details!
-      }
-    });
+    const isMatch = await user.comparePassword(currentPassword);
 
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Current password is incorrect"
+      });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    return res.status(200).json({
+      message: "Password changed successfully"
+    });
   } catch (err) {
-    res.status(500).json({ message: "Error fetching profile", error: err.message });
+    return res.status(500).json({
+      message: "Failed to change password"
+    });
+  }
+});
+
+authRouter.get("/logout", checkUser, async (req, res) => {
+  try {
+    res.clearCookie("token");
+    return res.status(200).json({ message: "User logged out" });
+  } catch (err) {
+    return res.status(400).json({ message: `error in logout ${err.message}` });
   }
 });

@@ -1,65 +1,47 @@
-// import {model,Schema}  from "mongoose";
-// //create Transaction schema
-// const transactionSchema = new Schema({
-//     amount: {
-//         type: Number,
-//         required: true
-//     },
-//     category: {
-//         type: String,
-//         required: true
-//     },
-//     date: {
-//         type: Date,
-//         required: true
-//     },
-//     description: {
-//         type: String,
-//         required: false
-//     },  
-//     userId: {
-//         type: Schema.Types.ObjectId,
-//         ref: 'User',
-//         required: true
-//     }
-// });
-// //create Transaction model
-// const Transaction = model('Transaction', transactionSchema);
-// //export Transaction model
-// export default Transaction;
- import mongoose, { model, Schema } from "mongoose";
+import mongoose, { model, Schema } from "mongoose";
 
 const transactionSchema = new Schema({
-
   amount: {
     type: Number,
     required: true
   },
-
   category: {
     type: String,
     required: true
   },
-
+  type: {
+    type: String,
+    enum: ["expense", "income"],
+    default: "expense"
+  },
   date: {
     type: Date,
     required: true
   },
-
   description: {
     type: String
   },
-
+  merchant: {
+    type: String,
+    default: ""
+  },
+  receipt: {
+    filename: { type: String, default: "" },
+    extractedText: { type: String, default: "" },
+    confidence: { type: Number, default: null }
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  }, 
   userId: {
-    type: Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true
   },
-},
-  {
-        timestamps:true,
-        strict:"throw",
-        versionKey:false
+}, {
+  timestamps: true,
+  versionKey: false
 });
 
 const Transaction = model("Transaction", transactionSchema);
